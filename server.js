@@ -8,11 +8,11 @@ const nodemailer = require('nodemailer');
 
 const app = express();
 
-// CORS for Vercel/Netlify
+// CORS Purnovabe allow kora holo
 app.use(cors({
     origin: '*', 
-    methods: ['GET', 'POST'],
-    allowedHeaders: ['Content-Type']
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json({ limit: '50mb' }));
@@ -27,18 +27,15 @@ app.use('/upload', express.static(UPLOAD_DIR));
 const upload = multer({ dest: 'upload/' });
 const DB_FILE = './database.json';
 
-// Updated Transporter with Port 587 and TLS Settings
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 587,
-    secure: false, // 587 er jonno false hobe
+    secure: false,
     auth: { 
         user: 'bisalsaha42@gmail.com', 
         pass: 'mheljgawhmhadbkc' 
     },
-    tls: {
-        rejectUnauthorized: false // Connection timeout rodh korte sahajjo kore
-    }
+    tls: { rejectUnauthorized: false }
 });
 
 const loadDB = () => fs.existsSync(DB_FILE) ? JSON.parse(fs.readFileSync(DB_FILE)) : {};
@@ -61,20 +58,21 @@ app.post('/generate-link', (req, res) => {
 app.get('/doc/:id', (req, res) => {
     const db = loadDB();
     const data = db[req.params.id];
-    data ? res.json(data) : res.status(404).json({ error: "Not found" });
+    data ? res.json(data) : res.status(404).json({ error: "Document ID not found in database" });
 });
 
 app.post('/submit-sign/:id', async (req, res) => {
-    console.log(`🚀 Processing ID: ${req.params.id}`);
     try {
         const { signatureImages } = req.body;
         const db = loadDB();
         const docData = db[req.params.id];
         
-        if (!docData) return res.status(404).json({ error: "Data not found" });
+        if (!docData) return res.status(404).json({ error: "ID not found! Please re-upload PDF." });
 
         const filePath = path.join(UPLOAD_DIR, docData.pdfPath);
-        if (!fs.existsSync(filePath)) return res.status(404).json({ error: "PDF missing on server" });
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ error: "PDF file deleted from server. Re-upload is required." });
+        }
 
         const pdfBytes = fs.readFileSync(filePath);
         const pdfDoc = await PDFDocument.load(pdfBytes);
@@ -110,32 +108,21 @@ app.post('/submit-sign/:id', async (req, res) => {
         const signedPdfBytes = await pdfDoc.save();
         const pdfBuffer = Buffer.from(signedPdfBytes);
         
-        // Step 1: Wait for Email (AWAIT is key here)
         try {
             await transporter.sendMail({
                 from: '"Fixen Sign" <bisalsaha42@gmail.com>',
                 to: 'bisalsaha42@gmail.com',
-                subject: `New Signed Document: ${req.params.id}`,
-                text: 'Attached is your signed PDF document.',
-                attachments: [{
-                    filename: `Signed_${req.params.id}.pdf`,
-                    content: pdfBuffer,
-                    contentType: 'application/pdf'
-                }]
+                subject: `Signed Document: ${req.params.id}`,
+                attachments: [{ filename: `Signed_${req.params.id}.pdf`, content: pdfBuffer }]
             });
-            console.log("✅ Email sent successfully");
-        } catch (mailError) {
-            console.error("❌ Email failed:", mailError.message);
-        }
+        } catch (mErr) { console.log("Mail Fail:", mErr.message); }
 
-        // Step 2: Return PDF for download
         res.json({ pdf: pdfBuffer.toString('base64') });
 
     } catch (error) {
-        console.error("💥 Server Error:", error);
-        res.status(500).json({ error: "Failed to process PDF" });
+        res.status(500).json({ error: error.message });
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running`));

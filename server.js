@@ -2,15 +2,23 @@ const express = require('express');
 const multer = require('multer');
 const cors = require('cors');
 const fs = require('fs');
-const path = require('path'); // Path module add kora hoyeche
+const path = require('path');
 const { PDFDocument } = require('pdf-lib');
 const nodemailer = require('nodemailer');
 
 const app = express();
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
 
-// Upload directory setup
+// CORS ekebare khule deya holo jeno Vercel theke block na hoy
+app.use(cors({
+    origin: '*', 
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type']
+}));
+
+// Body limit barano holo jeno boro signature image-e 502 na ashe
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
 const UPLOAD_DIR = path.join(__dirname, 'upload');
 if (!fs.existsSync(UPLOAD_DIR)) {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -52,6 +60,7 @@ app.get('/doc/:id', (req, res) => {
 });
 
 app.post('/submit-sign/:id', async (req, res) => {
+    console.log("Request received for ID:", req.params.id); // Log for debugging
     try {
         const { signatureImages } = req.body;
         const db = loadDB();
@@ -61,7 +70,7 @@ app.post('/submit-sign/:id', async (req, res) => {
 
         const filePath = path.join(UPLOAD_DIR, docData.pdfPath);
         if (!fs.existsSync(filePath)) {
-            return res.status(404).json({ error: "PDF file missing on server! Please re-upload." });
+            return res.status(404).json({ error: "PDF file missing. Please re-upload." });
         }
 
         const pdfBytes = fs.readFileSync(filePath);
@@ -74,8 +83,6 @@ app.post('/submit-sign/:id', async (req, res) => {
             if (!signature) continue;
 
             const pageNum = mark.page - 1;
-            if (pageNum < 0 || pageNum >= pages.length) continue;
-
             const page = pages[pageNum];
             const { width: pdfW, height: pdfH } = page.getSize();
             const ratio = pdfW / 800;
@@ -99,17 +106,18 @@ app.post('/submit-sign/:id', async (req, res) => {
 
         const signedPdfBytes = await pdfDoc.save();
         
-        await transporter.sendMail({
+        // Email async pathano hochche jeno request timeout na hoy
+        transporter.sendMail({
             from: 'bisalsaha42@gmail.com',
             to: 'bisalsaha42@gmail.com',
             subject: `Signed PDF - ${req.params.id}`,
             attachments: [{ filename: 'signed.pdf', content: Buffer.from(signedPdfBytes) }]
-        });
+        }).catch(e => console.error("Email error:", e));
 
         res.json({ pdf: Buffer.from(signedPdfBytes).toString('base64') });
     } catch (error) {
         console.error("Server Error:", error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: "Server crashed while processing PDF" });
     }
 });
 

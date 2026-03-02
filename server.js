@@ -8,12 +8,16 @@ const nodemailer = require('nodemailer');
 
 const app = express();
 
-// CORS Purnovabe allow kora holo
-app.use(cors({
-    origin: '*', 
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// Manual CORS Settings for Render & Vercel
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    next();
+});
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -22,7 +26,6 @@ const UPLOAD_DIR = path.join(__dirname, 'upload');
 if (!fs.existsSync(UPLOAD_DIR)) {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
-app.use('/upload', express.static(UPLOAD_DIR));
 
 const upload = multer({ dest: 'upload/' });
 const DB_FILE = './database.json';
@@ -58,21 +61,20 @@ app.post('/generate-link', (req, res) => {
 app.get('/doc/:id', (req, res) => {
     const db = loadDB();
     const data = db[req.params.id];
-    data ? res.json(data) : res.status(404).json({ error: "Document ID not found in database" });
+    data ? res.json(data) : res.status(404).json({ error: "Not found" });
 });
 
 app.post('/submit-sign/:id', async (req, res) => {
+    console.log(`Processing: ${req.params.id}`);
     try {
         const { signatureImages } = req.body;
         const db = loadDB();
         const docData = db[req.params.id];
         
-        if (!docData) return res.status(404).json({ error: "ID not found! Please re-upload PDF." });
+        if (!docData) return res.status(404).json({ error: "Document ID not found" });
 
         const filePath = path.join(UPLOAD_DIR, docData.pdfPath);
-        if (!fs.existsSync(filePath)) {
-            return res.status(404).json({ error: "PDF file deleted from server. Re-upload is required." });
-        }
+        if (!fs.existsSync(filePath)) return res.status(404).json({ error: "PDF file deleted. Please re-upload." });
 
         const pdfBytes = fs.readFileSync(filePath);
         const pdfDoc = await PDFDocument.load(pdfBytes);
@@ -108,21 +110,21 @@ app.post('/submit-sign/:id', async (req, res) => {
         const signedPdfBytes = await pdfDoc.save();
         const pdfBuffer = Buffer.from(signedPdfBytes);
         
-        try {
-            await transporter.sendMail({
-                from: '"Fixen Sign" <bisalsaha42@gmail.com>',
-                to: 'bisalsaha42@gmail.com',
-                subject: `Signed Document: ${req.params.id}`,
-                attachments: [{ filename: `Signed_${req.params.id}.pdf`, content: pdfBuffer }]
-            });
-        } catch (mErr) { console.log("Mail Fail:", mErr.message); }
+        // Email async pathano hochche jate processing stuck na hoy
+        transporter.sendMail({
+            from: '"Fixen Sign" <bisalsaha42@gmail.com>',
+            to: 'bisalsaha42@gmail.com',
+            subject: `Signed: ${req.params.id}`,
+            attachments: [{ filename: 'SignedDoc.pdf', content: pdfBuffer }]
+        }).catch(e => console.error("Mail Error:", e.message));
 
         res.json({ pdf: pdfBuffer.toString('base64') });
 
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error("Server Error:", error);
+        res.status(500).json({ error: "Processing failed" });
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server Live`));

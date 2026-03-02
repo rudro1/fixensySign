@@ -2,14 +2,14 @@ const express = require('express');
 const multer = require('multer');
 const cors = require('cors');
 const fs = require('fs');
-const path = require('path');
+const axios = require('axios'); // Added for stable PDF fetching
 const { PDFDocument } = require('pdf-lib');
 const nodemailer = require('nodemailer');
 const cloudinary = require('cloudinary').v2;
 
 const app = express();
 
-// 🛑 NEW FULLY UPDATED CONFIG
+// 🛑 CLOUDINARY CONFIG (NEW CREDENTIALS)
 cloudinary.config({ 
   cloud_name: 'dxbpamnhh', 
   api_key: '139816973735674', 
@@ -30,18 +30,19 @@ const transporter = nodemailer.createTransport({
 const loadDB = () => fs.existsSync(DB_FILE) ? JSON.parse(fs.readFileSync(DB_FILE)) : {};
 const saveDB = (data) => fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 
+// 1. PDF UPLOAD TO CLOUDINARY
 app.post('/upload-pdf', upload.single('pdfFile'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: "No file" });
-        // resource_type: "auto" PDF-er jonno khub proyojoniyo
         const result = await cloudinary.uploader.upload(req.file.path, { resource_type: "auto" });
         if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); 
         res.json({ pdfPath: result.secure_url }); 
     } catch (error) {
-        res.status(500).json({ error: "Cloudinary failed: " + error.message });
+        res.status(500).json({ error: "Cloudinary upload failed: " + error.message });
     }
 });
 
+// 2. GENERATE DOCUMENT LINK
 app.post('/generate-link', (req, res) => {
     const { pdfPath, signs } = req.body;
     const id = "doc-" + Date.now();
@@ -51,12 +52,14 @@ app.post('/generate-link', (req, res) => {
     res.json({ id: id });
 });
 
+// 3. GET DOCUMENT DATA
 app.get('/doc/:id', (req, res) => {
     const db = loadDB();
     const data = db[req.params.id];
     data ? res.json(data) : res.status(404).json({ error: "Not found" });
 });
 
+// 4. SUBMIT SIGNATURES (FIXED 500 ERROR)
 app.post('/submit-sign/:id', async (req, res) => {
     try {
         const { signatureImages } = req.body;
@@ -64,9 +67,9 @@ app.post('/submit-sign/:id', async (req, res) => {
         const docData = db[req.params.id];
         if (!docData) return res.status(404).json({ error: "ID missing" });
 
-        const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
-        const response = await fetch(docData.pdfPath);
-        const pdfBytes = await response.arrayBuffer();
+        // Fetch PDF as ArrayBuffer using Axios
+        const response = await axios.get(docData.pdfPath, { responseType: 'arraybuffer' });
+        const pdfBytes = response.data;
         const pdfDoc = await PDFDocument.load(pdfBytes);
         const pages = pdfDoc.getPages();
 
@@ -95,18 +98,19 @@ app.post('/submit-sign/:id', async (req, res) => {
         const signedPdfBytes = await pdfDoc.save();
         const pdfBuffer = Buffer.from(signedPdfBytes);
         
-        transporter.sendMail({
+        await transporter.sendMail({
             from: 'bisalsaha42@gmail.com',
             to: 'bisalsaha42@gmail.com',
             subject: `Signed: ${req.params.id}`,
             attachments: [{ filename: 'Signed.pdf', content: pdfBuffer }]
-        }).catch(e => console.log("Mail Error"));
+        });
 
         res.json({ pdf: pdfBuffer.toString('base64') });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error("Internal Error:", error.message);
+        res.status(500).json({ error: "Processing failed: " + error.message });
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Ready with New Cloud: dxbpamnhh`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Ready with Axios Fix`));

@@ -9,7 +9,7 @@ const cloudinary = require('cloudinary').v2;
 
 const app = express();
 
-// Cloudinary Configuration (Apnar Account details bosiye din)
+// Cloudinary Config - Apnar dashboard theke milie nite hobe
 cloudinary.config({ 
   cloud_name: 'dqz7y6t6n', 
   api_key: '235218764267673', 
@@ -30,13 +30,21 @@ const transporter = nodemailer.createTransport({
 const loadDB = () => fs.existsSync(DB_FILE) ? JSON.parse(fs.readFileSync(DB_FILE)) : {};
 const saveDB = (data) => fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 
-// Upload and Save to Cloudinary for Permanent Link
+// Step 1: Upload Fix with Debugging
 app.post('/upload-pdf', upload.single('pdfFile'), async (req, res) => {
     try {
+        if (!req.file) return res.status(400).json({ error: "No file provided" });
+        
+        console.log("Uploading to Cloudinary...");
         const result = await cloudinary.uploader.upload(req.file.path, { resource_type: "raw" });
-        res.json({ pdfPath: result.secure_url }); // Permanent Cloud Link
+        
+        // Local file remove kora (storage bachaner jonno)
+        fs.unlinkSync(req.file.path); 
+        
+        res.json({ pdfPath: result.secure_url }); 
     } catch (error) {
-        res.status(500).json({ error: "Cloudinary Upload Failed" });
+        console.error("Cloudinary Error:", error.message);
+        res.status(500).json({ error: "Cloudinary upload failed: " + error.message });
     }
 });
 
@@ -52,7 +60,8 @@ app.post('/generate-link', (req, res) => {
 app.get('/doc/:id', (req, res) => {
     const db = loadDB();
     const data = db[req.params.id];
-    data ? res.json(data) : res.status(404).json({ error: "Document Not Found" });
+    if (data) return res.json(data);
+    res.status(404).json({ error: "Document ID not found in database." });
 });
 
 app.post('/submit-sign/:id', async (req, res) => {
@@ -63,9 +72,11 @@ app.post('/submit-sign/:id', async (req, res) => {
         
         if (!docData) return res.status(404).json({ error: "ID missing" });
 
-        // Cloudinary theke PDF fetch kora hochche
+        // Cloudinary theke fetch (Axios ba Fetch install kora dorkar)
+        const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
         const response = await fetch(docData.pdfPath);
         const pdfBytes = await response.arrayBuffer();
+        
         const pdfDoc = await PDFDocument.load(pdfBytes);
         const pages = pdfDoc.getPages();
 
@@ -103,9 +114,10 @@ app.post('/submit-sign/:id', async (req, res) => {
 
         res.json({ pdf: pdfBuffer.toString('base64') });
     } catch (error) {
+        console.error("Submit Sign Error:", error);
         res.status(500).json({ error: error.message });
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Permanent Link Server Live`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Ready on ${PORT}`));

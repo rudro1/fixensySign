@@ -27,15 +27,17 @@ app.use('/upload', express.static(UPLOAD_DIR));
 const upload = multer({ dest: 'upload/' });
 const DB_FILE = './database.json';
 
-// Updated Transporter with Secure Settings
+// Updated Transporter with Port 587 and TLS Settings
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
     host: 'smtp.gmail.com',
-    port: 465,
-    secure: true, 
+    port: 587,
+    secure: false, // 587 er jonno false hobe
     auth: { 
         user: 'bisalsaha42@gmail.com', 
-        pass: 'mheljgawhmhadbkc' // App Password (16 characters)
+        pass: 'mheljgawhmhadbkc' 
+    },
+    tls: {
+        rejectUnauthorized: false // Connection timeout rodh korte sahajjo kore
     }
 });
 
@@ -62,9 +64,8 @@ app.get('/doc/:id', (req, res) => {
     data ? res.json(data) : res.status(404).json({ error: "Not found" });
 });
 
-// Final Optimized Route
 app.post('/submit-sign/:id', async (req, res) => {
-    console.log(`Processing ID: ${req.params.id}`);
+    console.log(`🚀 Processing ID: ${req.params.id}`);
     try {
         const { signatureImages } = req.body;
         const db = loadDB();
@@ -109,7 +110,7 @@ app.post('/submit-sign/:id', async (req, res) => {
         const signedPdfBytes = await pdfDoc.save();
         const pdfBuffer = Buffer.from(signedPdfBytes);
         
-        // Step 1: Mail sending with Await (Mone rakhben, eti mail pathate wait korbe)
+        // Step 1: Wait for Email (AWAIT is key here)
         try {
             await transporter.sendMail({
                 from: '"Fixen Sign" <bisalsaha42@gmail.com>',
@@ -124,11 +125,10 @@ app.post('/submit-sign/:id', async (req, res) => {
             });
             console.log("✅ Email sent successfully");
         } catch (mailError) {
-            console.error("❌ Email failed:", mailError);
-            // Even if mail fails, we want the user to get the download
+            console.error("❌ Email failed:", mailError.message);
         }
 
-        // Step 2: Send base64 to frontend for download
+        // Step 2: Return PDF for download
         res.json({ pdf: pdfBuffer.toString('base64') });
 
     } catch (error) {

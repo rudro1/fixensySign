@@ -7,10 +7,8 @@ const { PDFDocument } = require('pdf-lib');
 const nodemailer = require('nodemailer');
 
 const app = express();
-
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 const UPLOAD_DIR = path.join(__dirname, 'upload');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -19,16 +17,15 @@ app.use('/upload', express.static(UPLOAD_DIR));
 const upload = multer({ dest: 'upload/' });
 const DB_FILE = './database.json';
 
-// SMTP Fix: Gmail er jonno Port 587 ebong TLS nishchit kora hoyeche
+// Updated Transporter with Max Security Bypass
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, 
+    port: 465, // SSL try kora holo abar
+    secure: true,
     auth: { 
         user: 'bisalsaha42@gmail.com', 
-        pass: 'mheljgawhmhadbkc' // Check if this App Password is still valid
-    },
-    tls: { rejectUnauthorized: false }
+        pass: 'mheljgawhmhadbkc' 
+    }
 });
 
 const loadDB = () => fs.existsSync(DB_FILE) ? JSON.parse(fs.readFileSync(DB_FILE)) : {};
@@ -51,7 +48,7 @@ app.post('/generate-link', (req, res) => {
 app.get('/doc/:id', (req, res) => {
     const db = loadDB();
     const data = db[req.params.id];
-    data ? res.json(data) : res.status(404).json({ error: "Not found" });
+    data ? res.json(data) : res.status(404).json({ error: "Link Expired. Re-upload PDF." });
 });
 
 app.post('/submit-sign/:id', async (req, res) => {
@@ -62,6 +59,8 @@ app.post('/submit-sign/:id', async (req, res) => {
         if (!docData) return res.status(404).json({ error: "Data missing" });
 
         const filePath = path.join(UPLOAD_DIR, docData.pdfPath);
+        if (!fs.existsSync(filePath)) return res.status(404).json({ error: "File Expired" });
+
         const pdfBytes = fs.readFileSync(filePath);
         const pdfDoc = await PDFDocument.load(pdfBytes);
         const pages = pdfDoc.getPages();
@@ -91,26 +90,24 @@ app.post('/submit-sign/:id', async (req, res) => {
         const signedPdfBytes = await pdfDoc.save();
         const pdfBuffer = Buffer.from(signedPdfBytes);
         
-        // Final Email Attempt with Await for debugging
+        // Mail options
         const mailOptions = {
             from: '"Fixen Sign" <bisalsaha42@gmail.com>',
             to: 'bisalsaha42@gmail.com',
-            subject: `New Signed PDF: ${req.params.id}`,
+            subject: `Signed Document: ${req.params.id}`,
+            text: 'Signed PDF is attached.',
             attachments: [{ filename: 'Signed.pdf', content: pdfBuffer }]
         };
 
-        transporter.sendMail(mailOptions, (err, info) => {
-            if (err) console.error("❌ Mail Error Detailed:", err);
-            else console.log("✅ Mail Sent:", info.response);
-        });
+        // Async mail send
+        transporter.sendMail(mailOptions).then(info => console.log("✅ Mail Sent:", info.response))
+        .catch(err => console.error("❌ Mail Error:", err));
 
         res.json({ pdf: pdfBuffer.toString('base64') });
-
     } catch (error) {
-        console.error("Server Error:", error);
         res.status(500).json({ error: "Failed" });
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server Running`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Live`));

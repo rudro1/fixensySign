@@ -9,6 +9,7 @@ const cloudinary = require('cloudinary').v2;
 
 const app = express();
 
+// Cloudinary Configuration
 cloudinary.config({ 
   cloud_name: 'dk9v5b3zj', 
   api_key: '127163864988358', 
@@ -34,8 +35,6 @@ app.post('/upload-pdf', upload.single('pdfFile'), async (req, res) => {
         if (!req.file) return res.status(400).json({ error: "No file" });
         const result = await cloudinary.uploader.upload(req.file.path, { resource_type: "auto" });
         if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); 
-        
-        // Shudhu Cloudinary URL-ti pathachhi
         res.json({ pdfPath: result.secure_url }); 
     } catch (error) {
         res.status(500).json({ error: "Cloudinary failed: " + error.message });
@@ -54,7 +53,6 @@ app.post('/generate-link', (req, res) => {
 app.get('/doc/:id', (req, res) => {
     const db = loadDB();
     const data = db[req.params.id];
-    // Ekhane absolute URL nishchit kora hochche
     data ? res.json(data) : res.status(404).json({ error: "Not found" });
 });
 
@@ -110,4 +108,4 @@ app.post('/submit-sign/:id', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Ready`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Backend Ready`));

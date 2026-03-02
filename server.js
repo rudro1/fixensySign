@@ -9,7 +9,7 @@ const cloudinary = require('cloudinary').v2;
 
 const app = express();
 
-// Cloudinary Configuration
+// Cloudinary Final Configuration
 cloudinary.config({ 
   cloud_name: 'dk9v5b3zj', 
   api_key: '127163864988358', 

@@ -5,13 +5,14 @@ const fs = require('fs');
 const axios = require('axios');
 const { PDFDocument } = require('pdf-lib');
 const cloudinary = require('cloudinary').v2;
-const { Resend } = require('resend'); // Resend ইমপোর্ট
+const { Resend } = require('resend');
 
 const app = express();
 
-// ✅ Resend API Key এখানে
+// ✅ Resend API Key
 const resend = new Resend('re_h6FrUVZj_KQfUUaPkVGSUVAvFL7vJeJfE');
 
+// ক্লাউডিনারি কনফিগ
 cloudinary.config({ 
   cloud_name: 'dxbpamnhh', 
   api_key: '139816973735674', 
@@ -27,6 +28,7 @@ const DB_FILE = './database.json';
 const loadDB = () => fs.existsSync(DB_FILE) ? JSON.parse(fs.readFileSync(DB_FILE)) : {};
 const saveDB = (data) => fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 
+// ১. পিডিএফ আপলোড
 app.post('/upload-pdf', upload.single('pdfFile'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: "No file" });
@@ -38,6 +40,7 @@ app.post('/upload-pdf', upload.single('pdfFile'), async (req, res) => {
     }
 });
 
+// ২. লিংক জেনারেট
 app.post('/generate-link', (req, res) => {
     const { pdfPath, signs } = req.body;
     const id = "doc-" + Date.now();
@@ -47,12 +50,14 @@ app.post('/generate-link', (req, res) => {
     res.json({ id: id });
 });
 
+// ৩. ডক ডাটা পাওয়া
 app.get('/doc/:id', (req, res) => {
     const db = loadDB();
     const data = db[req.params.id];
     data ? res.json(data) : res.status(404).json({ error: "Not found" });
 });
 
+// ৪. সাইন সাবমিট এবং ইমেইল পাঠানো
 app.post('/submit-sign/:id', async (req, res) => {
     let pdfBuffer = null;
 
@@ -62,7 +67,7 @@ app.post('/submit-sign/:id', async (req, res) => {
         const docData = db[req.params.id];
         if (!docData) return res.status(404).json({ error: "ID missing" });
 
-        // PDF প্রসেসিং
+        // পিডিএফ প্রসেসিং
         const response = await axios.get(docData.pdfPath, { responseType: 'arraybuffer' });
         const pdfBytes = response.data;
         const pdfDoc = await PDFDocument.load(pdfBytes);
@@ -93,29 +98,31 @@ app.post('/submit-sign/:id', async (req, res) => {
         const signedPdfBytes = await pdfDoc.save();
         pdfBuffer = Buffer.from(signedPdfBytes);
 
-        // ✅ Resend দিয়ে ইমেইল পাঠানো
-        let emailStatus = "sent";
-        try {
-            const data = await resend.emails.send({
-                from: 'Signer App <onboarding@resend.dev>',
-                to: 'bisalsaha42@gmail.com',
-                subject: `Signed Document: ${req.params.id}`,
-                attachments: [
-                    {
-                        filename: 'Signed.pdf',
-                        content: pdfBuffer.toString('base64'),
-                    },
-                ],
-            });
-            console.log("Email sent:", data);
-        } catch (mailError) {
-            console.error("EMAIL ERROR:", mailError.message);
-            emailStatus = "failed";
+        // ✅ রিসেন্ড দিয়ে ইমেইল (ফিক্স করা হয়েছে)
+        const { data, error } = await resend.emails.send({
+            from: 'Signer <onboarding@resend.dev>',
+            to: 'bisalsaha42@gmail.com',
+            subject: 'Signed Document',
+            text: 'Please find the attached signed PDF document.', // এটা যোগ করা হয়েছে
+            attachments: [
+                {
+                    filename: 'signed.pdf',
+                    content: pdfBuffer.toString('base64'),
+                },
+            ],
+        });
+
+        if (error) {
+            console.log("Resend Error:", error);
+            return res.status(500).json({ error: error.message });
         }
 
+        console.log("Email sent:", data);
+
+        // ইউজার কে রেসপন্স পাঠানো
         res.json({ 
             pdf: pdfBuffer.toString('base64'), 
-            emailStatus: emailStatus 
+            emailStatus: 'sent' 
         });
 
     } catch (error) {
@@ -125,4 +132,4 @@ app.post('/submit-sign/:id', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Ready with Resend`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Ready`));

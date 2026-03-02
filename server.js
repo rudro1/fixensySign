@@ -4,12 +4,14 @@ const cors = require('cors');
 const fs = require('fs');
 const axios = require('axios');
 const { PDFDocument } = require('pdf-lib');
-const nodemailer = require('nodemailer');
 const cloudinary = require('cloudinary').v2;
+const { Resend } = require('resend'); // Resend ইমপোর্ট
 
 const app = express();
 
-// ক্লাউডিনারি কনফিগ
+// ✅ Resend API Key এখানে
+const resend = new Resend('re_h6FrUVZj_KQfUUaPkVGSUVAvFL7vJeJfE');
+
 cloudinary.config({ 
   cloud_name: 'dxbpamnhh', 
   api_key: '139816973735674', 
@@ -21,17 +23,6 @@ app.use(express.json({ limit: '50mb' }));
 
 const upload = multer({ dest: 'upload/' });
 const DB_FILE = './database.json';
-
-// 🚨 এখানে твоят নতুন App Password বসাও
-const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true, // true for 465
-    auth: {
-        user: 'bisalsaha42@gmail.com',
-        pass: 'XXXX XXXX XXXX XXXX' // এখানে নতুন ১৬ সংখ্যার পাসওয়ার্ড বসাও
-    }
-});
 
 const loadDB = () => fs.existsSync(DB_FILE) ? JSON.parse(fs.readFileSync(DB_FILE)) : {};
 const saveDB = (data) => fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
@@ -102,19 +93,23 @@ app.post('/submit-sign/:id', async (req, res) => {
         const signedPdfBytes = await pdfDoc.save();
         pdfBuffer = Buffer.from(signedPdfBytes);
 
-        // মেইল পাঠানোর চেষ্টা
+        // ✅ Resend দিয়ে ইমেইল পাঠানো
         let emailStatus = "sent";
         try {
-            console.log("Attempting to send email..."); // লগ দেখার জন্য
-            await transporter.sendMail({
-                from: 'bisalsaha42@gmail.com',
-                to: 'bisalsaha42@gmail.com', // তুমি চাইলে frontend থেকে email আনতে পারো
-                subject: `Signed: ${req.params.id}`,
-                attachments: [{ filename: 'Signed.pdf', content: pdfBuffer }]
+            const data = await resend.emails.send({
+                from: 'Signer App <onboarding@resend.dev>',
+                to: 'bisalsaha42@gmail.com',
+                subject: `Signed Document: ${req.params.id}`,
+                attachments: [
+                    {
+                        filename: 'Signed.pdf',
+                        content: pdfBuffer.toString('base64'),
+                    },
+                ],
             });
-            console.log("Email sent successfully!");
+            console.log("Email sent:", data);
         } catch (mailError) {
-            console.error("EMAIL ERROR:", mailError.message); // এখানে দেখো কী এরর আসছে
+            console.error("EMAIL ERROR:", mailError.message);
             emailStatus = "failed";
         }
 
@@ -130,4 +125,4 @@ app.post('/submit-sign/:id', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Ready`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Ready with Resend`));

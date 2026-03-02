@@ -9,11 +9,11 @@ const cloudinary = require('cloudinary').v2;
 
 const app = express();
 
-// 🛑 NOTUN CREDENTIALS CONFIG (NO SPACES)
+// 🛑 NEW FULLY UPDATED CONFIG
 cloudinary.config({ 
-  cloud_name: 'dk9v5b3zj', 
-  api_key: '979862556253117', 
-  api_secret: 'PZXi5SznNXkNELMziowxwkZok94' 
+  cloud_name: 'dxbpamnhh', 
+  api_key: '139816973735674', 
+  api_secret: '0V4H5KqC-YPpHi5ZJogC_41-Eeg' 
 });
 
 app.use(cors({ origin: '*' }));
@@ -33,7 +33,7 @@ const saveDB = (data) => fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2)
 app.post('/upload-pdf', upload.single('pdfFile'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: "No file" });
-        // Resource type auto thakte hobe jate PDF allow kore
+        // resource_type: "auto" PDF-er jonno khub proyojoniyo
         const result = await cloudinary.uploader.upload(req.file.path, { resource_type: "auto" });
         if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); 
         res.json({ pdfPath: result.secure_url }); 
@@ -109,4 +109,4 @@ app.post('/submit-sign/:id', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Ready with New Cloudinary Keys`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Ready with New Cloud: dxbpamnhh`));

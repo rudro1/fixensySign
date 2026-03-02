@@ -35,7 +35,7 @@ const transporter = nodemailer.createTransport({
     secure: true, 
     auth: { 
         user: 'bisalsaha42@gmail.com', 
-        pass: 'mheljgawhmhadbkc' // Ensure this is a 16-digit App Password
+        pass: 'mheljgawhmhadbkc' // App Password (16 characters)
     }
 });
 
@@ -62,7 +62,9 @@ app.get('/doc/:id', (req, res) => {
     data ? res.json(data) : res.status(404).json({ error: "Not found" });
 });
 
+// Final Optimized Route
 app.post('/submit-sign/:id', async (req, res) => {
+    console.log(`Processing ID: ${req.params.id}`);
     try {
         const { signatureImages } = req.body;
         const db = loadDB();
@@ -71,7 +73,7 @@ app.post('/submit-sign/:id', async (req, res) => {
         if (!docData) return res.status(404).json({ error: "Data not found" });
 
         const filePath = path.join(UPLOAD_DIR, docData.pdfPath);
-        if (!fs.existsSync(filePath)) return res.status(404).json({ error: "PDF missing" });
+        if (!fs.existsSync(filePath)) return res.status(404).json({ error: "PDF missing on server" });
 
         const pdfBytes = fs.readFileSync(filePath);
         const pdfDoc = await PDFDocument.load(pdfBytes);
@@ -105,28 +107,32 @@ app.post('/submit-sign/:id', async (req, res) => {
         }
 
         const signedPdfBytes = await pdfDoc.save();
+        const pdfBuffer = Buffer.from(signedPdfBytes);
         
-        // Email with proper attachment
-        const mailOptions = {
-            from: '"Fixen Sign" <bisalsaha42@gmail.com>',
-            to: 'bisalsaha42@gmail.com',
-            subject: `New Signed Document: ${req.params.id}`,
-            text: 'Please find the signed PDF attached below.',
-            attachments: [{
-                filename: `Signed_${req.params.id}.pdf`,
-                content: Buffer.from(signedPdfBytes),
-                contentType: 'application/pdf'
-            }]
-        };
+        // Step 1: Mail sending with Await (Mone rakhben, eti mail pathate wait korbe)
+        try {
+            await transporter.sendMail({
+                from: '"Fixen Sign" <bisalsaha42@gmail.com>',
+                to: 'bisalsaha42@gmail.com',
+                subject: `New Signed Document: ${req.params.id}`,
+                text: 'Attached is your signed PDF document.',
+                attachments: [{
+                    filename: `Signed_${req.params.id}.pdf`,
+                    content: pdfBuffer,
+                    contentType: 'application/pdf'
+                }]
+            });
+            console.log("✅ Email sent successfully");
+        } catch (mailError) {
+            console.error("❌ Email failed:", mailError);
+            // Even if mail fails, we want the user to get the download
+        }
 
-        transporter.sendMail(mailOptions, (error, info) => {
-            if (error) console.log("Mail Error:", error);
-            else console.log("Mail Sent:", info.response);
-        });
+        // Step 2: Send base64 to frontend for download
+        res.json({ pdf: pdfBuffer.toString('base64') });
 
-        res.json({ pdf: Buffer.from(signedPdfBytes).toString('base64') });
     } catch (error) {
-        console.error("Server Error:", error);
+        console.error("💥 Server Error:", error);
         res.status(500).json({ error: "Failed to process PDF" });
     }
 });

@@ -9,7 +9,7 @@ const cloudinary = require('cloudinary').v2;
 
 const app = express();
 
-// 🛑 CLOUDINARY CONFIG
+// ক্লাউডিনারি কনফিগ
 cloudinary.config({ 
   cloud_name: 'dxbpamnhh', 
   api_key: '139816973735674', 
@@ -22,12 +22,15 @@ app.use(express.json({ limit: '50mb' }));
 const upload = multer({ dest: 'upload/' });
 const DB_FILE = './database.json';
 
-// 🛑 GMAIL SMTP CONFIG (FORCE IPv4 HOST)
+// 🚨 এখানে твоят নতুন App Password বসাও
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 465,
-    secure: true,
-    auth: { user: 'bisalsaha42@gmail.com', pass: 'mheljgawhmhadbkc' }
+    secure: true, // true for 465
+    auth: {
+        user: 'bisalsaha42@gmail.com',
+        pass: 'XXXX XXXX XXXX XXXX' // এখানে নতুন ১৬ সংখ্যার পাসওয়ার্ড বসাও
+    }
 });
 
 const loadDB = () => fs.existsSync(DB_FILE) ? JSON.parse(fs.readFileSync(DB_FILE)) : {};
@@ -40,7 +43,7 @@ app.post('/upload-pdf', upload.single('pdfFile'), async (req, res) => {
         if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); 
         res.json({ pdfPath: result.secure_url }); 
     } catch (error) {
-        res.status(500).json({ error: "Upload failed: " + error.message });
+        res.status(500).json({ error: "Cloudinary upload failed: " + error.message });
     }
 });
 
@@ -59,30 +62,33 @@ app.get('/doc/:id', (req, res) => {
     data ? res.json(data) : res.status(404).json({ error: "Not found" });
 });
 
-// 🚀 FIXED SUBMIT LOGIC (NO MORE STUCK ON PROCESSING)
 app.post('/submit-sign/:id', async (req, res) => {
+    let pdfBuffer = null;
+
     try {
         const { signatureImages } = req.body;
         const db = loadDB();
         const docData = db[req.params.id];
         if (!docData) return res.status(404).json({ error: "ID missing" });
 
-        // Step 1: Fetch PDF from Cloudinary
+        // PDF প্রসেসিং
         const response = await axios.get(docData.pdfPath, { responseType: 'arraybuffer' });
-        const pdfDoc = await PDFDocument.load(response.data);
+        const pdfBytes = response.data;
+        const pdfDoc = await PDFDocument.load(pdfBytes);
         const pages = pdfDoc.getPages();
 
-        // Step 2: Draw Signatures
         for (let i = 0; i < docData.signs.length; i++) {
             const mark = docData.signs[i];
             const signature = signatureImages[i];
             if (!signature) continue;
 
-            const page = pages[mark.page - 1];
+            const pageNum = mark.page - 1;
+            const page = pages[pageNum];
             const { width: pdfW, height: pdfH } = page.getSize();
             const ratio = pdfW / 800;
 
-            const imgBytes = Buffer.from(signature.split(',')[1], 'base64');
+            const base64 = signature.replace(/^data:image\/\w+;base64,/, '');
+            const imgBytes = Buffer.from(base64, 'base64');
             const image = await pdfDoc.embedPng(imgBytes);
 
             page.drawImage(image, {
@@ -94,24 +100,34 @@ app.post('/submit-sign/:id', async (req, res) => {
         }
 
         const signedPdfBytes = await pdfDoc.save();
-        const pdfBuffer = Buffer.from(signedPdfBytes);
+        pdfBuffer = Buffer.from(signedPdfBytes);
 
-        // 🛑 ASYNC MAIL (DO NOT AWAIT - PREVENTS ENETUNREACH STUCK)
-        transporter.sendMail({
-            from: 'bisalsaha42@gmail.com',
-            to: 'bisalsaha42@gmail.com',
-            subject: `Signed: ${req.params.id}`,
-            attachments: [{ filename: 'Signed.pdf', content: pdfBuffer }]
-        }).catch(err => console.log("Mail network error ignored."));
+        // মেইল পাঠানোর চেষ্টা
+        let emailStatus = "sent";
+        try {
+            console.log("Attempting to send email..."); // লগ দেখার জন্য
+            await transporter.sendMail({
+                from: 'bisalsaha42@gmail.com',
+                to: 'bisalsaha42@gmail.com', // তুমি চাইলে frontend থেকে email আনতে পারো
+                subject: `Signed: ${req.params.id}`,
+                attachments: [{ filename: 'Signed.pdf', content: pdfBuffer }]
+            });
+            console.log("Email sent successfully!");
+        } catch (mailError) {
+            console.error("EMAIL ERROR:", mailError.message); // এখানে দেখো কী এরর আসছে
+            emailStatus = "failed";
+        }
 
-        // Step 3: Return PDF to User Immediately
-        res.json({ pdf: pdfBuffer.toString('base64') });
+        res.json({ 
+            pdf: pdfBuffer.toString('base64'), 
+            emailStatus: emailStatus 
+        });
 
     } catch (error) {
-        console.error("Critical Error:", error.message);
-        res.status(500).json({ error: "Error: " + error.message });
+        console.error("Fatal Error:", error.message);
+        res.status(500).json({ error: "Processing failed: " + error.message });
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server Ready`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Ready`));

@@ -8,14 +8,13 @@ const nodemailer = require('nodemailer');
 
 const app = express();
 
-// CORS ekebare khule deya holo jeno Vercel theke block na hoy
+// CORS for Vercel/Netlify
 app.use(cors({
     origin: '*', 
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type']
 }));
 
-// Body limit barano holo jeno boro signature image-e 502 na ashe
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -28,11 +27,15 @@ app.use('/upload', express.static(UPLOAD_DIR));
 const upload = multer({ dest: 'upload/' });
 const DB_FILE = './database.json';
 
+// Updated Transporter with Secure Settings
 const transporter = nodemailer.createTransport({
     service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true, 
     auth: { 
         user: 'bisalsaha42@gmail.com', 
-        pass: 'mheljgawhmhadbkc'
+        pass: 'mheljgawhmhadbkc' // Ensure this is a 16-digit App Password
     }
 });
 
@@ -60,18 +63,15 @@ app.get('/doc/:id', (req, res) => {
 });
 
 app.post('/submit-sign/:id', async (req, res) => {
-    console.log("Request received for ID:", req.params.id); // Log for debugging
     try {
         const { signatureImages } = req.body;
         const db = loadDB();
         const docData = db[req.params.id];
         
-        if (!docData) return res.status(404).json({ error: "Document data not found!" });
+        if (!docData) return res.status(404).json({ error: "Data not found" });
 
         const filePath = path.join(UPLOAD_DIR, docData.pdfPath);
-        if (!fs.existsSync(filePath)) {
-            return res.status(404).json({ error: "PDF file missing. Please re-upload." });
-        }
+        if (!fs.existsSync(filePath)) return res.status(404).json({ error: "PDF missing" });
 
         const pdfBytes = fs.readFileSync(filePath);
         const pdfDoc = await PDFDocument.load(pdfBytes);
@@ -106,18 +106,28 @@ app.post('/submit-sign/:id', async (req, res) => {
 
         const signedPdfBytes = await pdfDoc.save();
         
-        // Email async pathano hochche jeno request timeout na hoy
-        transporter.sendMail({
-            from: 'bisalsaha42@gmail.com',
+        // Email with proper attachment
+        const mailOptions = {
+            from: '"Fixen Sign" <bisalsaha42@gmail.com>',
             to: 'bisalsaha42@gmail.com',
-            subject: `Signed PDF - ${req.params.id}`,
-            attachments: [{ filename: 'signed.pdf', content: Buffer.from(signedPdfBytes) }]
-        }).catch(e => console.error("Email error:", e));
+            subject: `New Signed Document: ${req.params.id}`,
+            text: 'Please find the signed PDF attached below.',
+            attachments: [{
+                filename: `Signed_${req.params.id}.pdf`,
+                content: Buffer.from(signedPdfBytes),
+                contentType: 'application/pdf'
+            }]
+        };
+
+        transporter.sendMail(mailOptions, (error, info) => {
+            if (error) console.log("Mail Error:", error);
+            else console.log("Mail Sent:", info.response);
+        });
 
         res.json({ pdf: Buffer.from(signedPdfBytes).toString('base64') });
     } catch (error) {
         console.error("Server Error:", error);
-        res.status(500).json({ error: "Server crashed while processing PDF" });
+        res.status(500).json({ error: "Failed to process PDF" });
     }
 });
 

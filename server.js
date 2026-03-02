@@ -9,11 +9,11 @@ const cloudinary = require('cloudinary').v2;
 
 const app = express();
 
-// 🛑 CLOUDINARY FINAL CONFIG (ALL KEYS ADDED)
+// 🛑 CLOUDINARY FINAL AUTHENTICATED CONFIG
 cloudinary.config({ 
   cloud_name: 'dk9v5b3zj', 
-  api_key: '30814f222885a851b35e5835c27ffc', 
-  api_secret: 'IquS9tGoWFSJGeRa76inMOyXK7E' 
+  api_key: '127163864988358', // Apnar pawa sothik API Key
+  api_secret: 'IquS9tGoWFSJGeRa76inMOyXK7E' // Apnar pawa sothik API Secret
 });
 
 app.use(cors({ origin: '*' }));
@@ -30,7 +30,7 @@ const transporter = nodemailer.createTransport({
 const loadDB = () => fs.existsSync(DB_FILE) ? JSON.parse(fs.readFileSync(DB_FILE)) : {};
 const saveDB = (data) => fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 
-// Upload to Cloudinary (Permanent Link)
+// Permanent Cloud Upload
 app.post('/upload-pdf', upload.single('pdfFile'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: "No file" });
@@ -65,7 +65,6 @@ app.post('/submit-sign/:id', async (req, res) => {
         const docData = db[req.params.id];
         if (!docData) return res.status(404).json({ error: "ID missing" });
 
-        // Fetch PDF from Cloudinary
         const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
         const response = await fetch(docData.pdfPath);
         const pdfBytes = await response.arrayBuffer();
@@ -106,10 +105,9 @@ app.post('/submit-sign/:id', async (req, res) => {
 
         res.json({ pdf: pdfBuffer.toString('base64') });
     } catch (error) {
-        console.error("Error:", error.message);
         res.status(500).json({ error: error.message });
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server fully operational on port ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Final Fix Live`));

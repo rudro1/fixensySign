@@ -8,11 +8,21 @@ const nodemailer = require('nodemailer');
 
 const app = express();
 
-// Manual CORS Settings for Render & Vercel
+// 1. Purnovabe CORS config korun
+const corsOptions = {
+    origin: 'https://signfixensyfrontend.vercel.app', // Apnar Vercel URL
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+};
+
+app.use(cors(corsOptions));
+
+// 2. Manual Pre-flight handling (Eti CORS error bondho korbe)
 app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Origin", "https://signfixensyfrontend.vercel.app");
     res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
     if (req.method === 'OPTIONS') {
         return res.sendStatus(200);
     }
@@ -26,6 +36,7 @@ const UPLOAD_DIR = path.join(__dirname, 'upload');
 if (!fs.existsSync(UPLOAD_DIR)) {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
+app.use('/upload', express.static(UPLOAD_DIR));
 
 const upload = multer({ dest: 'upload/' });
 const DB_FILE = './database.json';
@@ -34,10 +45,7 @@ const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 587,
     secure: false,
-    auth: { 
-        user: 'bisalsaha42@gmail.com', 
-        pass: 'mheljgawhmhadbkc' 
-    },
+    auth: { user: 'bisalsaha42@gmail.com', pass: 'mheljgawhmhadbkc' },
     tls: { rejectUnauthorized: false }
 });
 
@@ -65,16 +73,16 @@ app.get('/doc/:id', (req, res) => {
 });
 
 app.post('/submit-sign/:id', async (req, res) => {
-    console.log(`Processing: ${req.params.id}`);
+    console.log(`Processing ID: ${req.params.id}`);
     try {
         const { signatureImages } = req.body;
         const db = loadDB();
         const docData = db[req.params.id];
         
-        if (!docData) return res.status(404).json({ error: "Document ID not found" });
+        if (!docData) return res.status(404).json({ error: "Document ID not found. Please re-upload PDF." });
 
         const filePath = path.join(UPLOAD_DIR, docData.pdfPath);
-        if (!fs.existsSync(filePath)) return res.status(404).json({ error: "PDF file deleted. Please re-upload." });
+        if (!fs.existsSync(filePath)) return res.status(404).json({ error: "PDF missing. Re-upload required." });
 
         const pdfBytes = fs.readFileSync(filePath);
         const pdfDoc = await PDFDocument.load(pdfBytes);
@@ -110,21 +118,21 @@ app.post('/submit-sign/:id', async (req, res) => {
         const signedPdfBytes = await pdfDoc.save();
         const pdfBuffer = Buffer.from(signedPdfBytes);
         
-        // Email async pathano hochche jate processing stuck na hoy
+        // Email async
         transporter.sendMail({
             from: '"Fixen Sign" <bisalsaha42@gmail.com>',
             to: 'bisalsaha42@gmail.com',
             subject: `Signed: ${req.params.id}`,
-            attachments: [{ filename: 'SignedDoc.pdf', content: pdfBuffer }]
-        }).catch(e => console.error("Mail Error:", e.message));
+            attachments: [{ filename: 'Signed.pdf', content: pdfBuffer }]
+        }).catch(e => console.error("Mail Fail:", e.message));
 
         res.json({ pdf: pdfBuffer.toString('base64') });
 
     } catch (error) {
-        console.error("Server Error:", error);
-        res.status(500).json({ error: "Processing failed" });
+        console.error("💥 Error:", error);
+        res.status(500).json({ error: error.message });
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server Live`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server Ready`));

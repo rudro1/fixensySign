@@ -9,11 +9,11 @@ const cloudinary = require('cloudinary').v2;
 
 const app = express();
 
-// Cloudinary Final Configuration
+// 🛑 NOTUN CREDENTIALS CONFIG (NO SPACES)
 cloudinary.config({ 
   cloud_name: 'dk9v5b3zj', 
-  api_key: '127163864988358', 
-  api_secret: 'IquS9tGoWFSJGeRa76inMOyXK7E' 
+  api_key: '979862556253117', 
+  api_secret: 'PZXi5SznNXkNELMziowxwkZok94' 
 });
 
 app.use(cors({ origin: '*' }));
@@ -33,6 +33,7 @@ const saveDB = (data) => fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2)
 app.post('/upload-pdf', upload.single('pdfFile'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: "No file" });
+        // Resource type auto thakte hobe jate PDF allow kore
         const result = await cloudinary.uploader.upload(req.file.path, { resource_type: "auto" });
         if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); 
         res.json({ pdfPath: result.secure_url }); 
@@ -108,4 +109,4 @@ app.post('/submit-sign/:id', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Backend Ready`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Ready with New Cloudinary Keys`));

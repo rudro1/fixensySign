@@ -5,47 +5,39 @@ const fs = require('fs');
 const path = require('path');
 const { PDFDocument } = require('pdf-lib');
 const nodemailer = require('nodemailer');
+const cloudinary = require('cloudinary').v2;
 
 const app = express();
 
-// CORS & Middleware
+// Cloudinary Configuration (Apnar Account details bosiye din)
+cloudinary.config({ 
+  cloud_name: 'dqz7y6t6n', 
+  api_key: '235218764267673', 
+  api_secret: 'vB97R93T_t0z7qW8r7yQW8u9I' 
+});
+
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
-const UPLOAD_DIR = path.join(__dirname, 'upload');
-if (!fs.existsSync(UPLOAD_DIR)) {
-    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-app.use('/upload', express.static(UPLOAD_DIR));
 
 const upload = multer({ dest: 'upload/' });
 const DB_FILE = './database.json';
 
-// Updated Transporter: Service based configuration for better IPv4 routing
 const transporter = nodemailer.createTransport({
     service: 'gmail',
-    auth: { 
-        user: 'bisalsaha42@gmail.com', 
-        pass: 'mheljgawhmhadbkc' 
-    },
-    tls: {
-        rejectUnauthorized: false // Connection block bypass korar jonno
-    }
-});
-
-// Connection test on start
-transporter.verify((error) => {
-    if (error) console.log("❌ SMTP Error:", error.message);
-    else console.log("✅ Email Server Ready!");
+    auth: { user: 'bisalsaha42@gmail.com', pass: 'mheljgawhmhadbkc' }
 });
 
 const loadDB = () => fs.existsSync(DB_FILE) ? JSON.parse(fs.readFileSync(DB_FILE)) : {};
 const saveDB = (data) => fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 
-app.post('/upload-pdf', upload.single('pdfFile'), (req, res) => {
-    if (!req.file) return res.status(400).json({ error: "No file" });
-    res.json({ pdfPath: req.file.filename });
+// Upload and Save to Cloudinary for Permanent Link
+app.post('/upload-pdf', upload.single('pdfFile'), async (req, res) => {
+    try {
+        const result = await cloudinary.uploader.upload(req.file.path, { resource_type: "raw" });
+        res.json({ pdfPath: result.secure_url }); // Permanent Cloud Link
+    } catch (error) {
+        res.status(500).json({ error: "Cloudinary Upload Failed" });
+    }
 });
 
 app.post('/generate-link', (req, res) => {
@@ -60,7 +52,7 @@ app.post('/generate-link', (req, res) => {
 app.get('/doc/:id', (req, res) => {
     const db = loadDB();
     const data = db[req.params.id];
-    data ? res.json(data) : res.status(404).json({ error: "Link expired/Invalid" });
+    data ? res.json(data) : res.status(404).json({ error: "Document Not Found" });
 });
 
 app.post('/submit-sign/:id', async (req, res) => {
@@ -69,12 +61,11 @@ app.post('/submit-sign/:id', async (req, res) => {
         const db = loadDB();
         const docData = db[req.params.id];
         
-        if (!docData) return res.status(404).json({ error: "Not found" });
+        if (!docData) return res.status(404).json({ error: "ID missing" });
 
-        const filePath = path.join(UPLOAD_DIR, docData.pdfPath);
-        if (!fs.existsSync(filePath)) return res.status(404).json({ error: "File deleted from server" });
-
-        const pdfBytes = fs.readFileSync(filePath);
+        // Cloudinary theke PDF fetch kora hochche
+        const response = await fetch(docData.pdfPath);
+        const pdfBytes = await response.arrayBuffer();
         const pdfDoc = await PDFDocument.load(pdfBytes);
         const pages = pdfDoc.getPages();
 
@@ -103,24 +94,18 @@ app.post('/submit-sign/:id', async (req, res) => {
         const signedPdfBytes = await pdfDoc.save();
         const pdfBuffer = Buffer.from(signedPdfBytes);
         
-        // Non-blocking Email attempt
-        const mailOptions = {
+        transporter.sendMail({
             from: 'bisalsaha42@gmail.com',
             to: 'bisalsaha42@gmail.com',
-            subject: `Signed Doc: ${req.params.id}`,
+            subject: `Signed: ${req.params.id}`,
             attachments: [{ filename: 'Signed.pdf', content: pdfBuffer }]
-        };
-
-        transporter.sendMail(mailOptions, (err) => {
-            if (err) console.log("❌ Final Mail Error:", err.message);
-            else console.log("✅ Mail Sent!");
-        });
+        }).catch(e => console.log("Mail Error"));
 
         res.json({ pdf: pdfBuffer.toString('base64') });
     } catch (error) {
-        res.status(500).json({ error: "Processing failed" });
+        res.status(500).json({ error: error.message });
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Live on ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Permanent Link Server Live`));

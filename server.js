@@ -9,11 +9,11 @@ const cloudinary = require('cloudinary').v2;
 
 const app = express();
 
-// Cloudinary Config - Apnar dashboard theke milie nite hobe
+// 🛑 CLOUDINARY FINAL CONFIG (ALL KEYS ADDED)
 cloudinary.config({ 
-  cloud_name: 'dqz7y6t6n', 
-  api_key: '235218764267673', 
-  api_secret: 'vB97R93T_t0z7qW8r7yQW8u9I' 
+  cloud_name: 'dk9v5b3zj', 
+  api_key: '30814f222885a851b35e5835c27ffc', 
+  api_secret: 'IquS9tGoWFSJGeRa76inMOyXK7E' 
 });
 
 app.use(cors({ origin: '*' }));
@@ -30,21 +30,16 @@ const transporter = nodemailer.createTransport({
 const loadDB = () => fs.existsSync(DB_FILE) ? JSON.parse(fs.readFileSync(DB_FILE)) : {};
 const saveDB = (data) => fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 
-// Step 1: Upload Fix with Debugging
+// Upload to Cloudinary (Permanent Link)
 app.post('/upload-pdf', upload.single('pdfFile'), async (req, res) => {
     try {
-        if (!req.file) return res.status(400).json({ error: "No file provided" });
-        
-        console.log("Uploading to Cloudinary...");
-        const result = await cloudinary.uploader.upload(req.file.path, { resource_type: "raw" });
-        
-        // Local file remove kora (storage bachaner jonno)
-        fs.unlinkSync(req.file.path); 
-        
+        if (!req.file) return res.status(400).json({ error: "No file" });
+        const result = await cloudinary.uploader.upload(req.file.path, { resource_type: "auto" });
+        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); 
         res.json({ pdfPath: result.secure_url }); 
     } catch (error) {
         console.error("Cloudinary Error:", error.message);
-        res.status(500).json({ error: "Cloudinary upload failed: " + error.message });
+        res.status(500).json({ error: "Cloudinary failed: " + error.message });
     }
 });
 
@@ -60,8 +55,7 @@ app.post('/generate-link', (req, res) => {
 app.get('/doc/:id', (req, res) => {
     const db = loadDB();
     const data = db[req.params.id];
-    if (data) return res.json(data);
-    res.status(404).json({ error: "Document ID not found in database." });
+    data ? res.json(data) : res.status(404).json({ error: "Not found" });
 });
 
 app.post('/submit-sign/:id', async (req, res) => {
@@ -69,14 +63,12 @@ app.post('/submit-sign/:id', async (req, res) => {
         const { signatureImages } = req.body;
         const db = loadDB();
         const docData = db[req.params.id];
-        
         if (!docData) return res.status(404).json({ error: "ID missing" });
 
-        // Cloudinary theke fetch (Axios ba Fetch install kora dorkar)
+        // Fetch PDF from Cloudinary
         const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
         const response = await fetch(docData.pdfPath);
         const pdfBytes = await response.arrayBuffer();
-        
         const pdfDoc = await PDFDocument.load(pdfBytes);
         const pages = pdfDoc.getPages();
 
@@ -108,16 +100,16 @@ app.post('/submit-sign/:id', async (req, res) => {
         transporter.sendMail({
             from: 'bisalsaha42@gmail.com',
             to: 'bisalsaha42@gmail.com',
-            subject: `Signed: ${req.params.id}`,
+            subject: `Signed Document: ${req.params.id}`,
             attachments: [{ filename: 'Signed.pdf', content: pdfBuffer }]
-        }).catch(e => console.log("Mail Error"));
+        }).then(() => console.log("✅ Mail Sent")).catch(e => console.log("❌ Mail Error:", e.message));
 
         res.json({ pdf: pdfBuffer.toString('base64') });
     } catch (error) {
-        console.error("Submit Sign Error:", error);
+        console.error("Error:", error.message);
         res.status(500).json({ error: error.message });
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Ready on ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server fully operational on port ${PORT}`));

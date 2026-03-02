@@ -9,11 +9,10 @@ const cloudinary = require('cloudinary').v2;
 
 const app = express();
 
-// 🛑 CLOUDINARY FINAL AUTHENTICATED CONFIG
 cloudinary.config({ 
   cloud_name: 'dk9v5b3zj', 
-  api_key: '127163864988358', // Apnar pawa sothik API Key
-  api_secret: 'IquS9tGoWFSJGeRa76inMOyXK7E' // Apnar pawa sothik API Secret
+  api_key: '127163864988358', 
+  api_secret: 'IquS9tGoWFSJGeRa76inMOyXK7E' 
 });
 
 app.use(cors({ origin: '*' }));
@@ -30,15 +29,15 @@ const transporter = nodemailer.createTransport({
 const loadDB = () => fs.existsSync(DB_FILE) ? JSON.parse(fs.readFileSync(DB_FILE)) : {};
 const saveDB = (data) => fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 
-// Permanent Cloud Upload
 app.post('/upload-pdf', upload.single('pdfFile'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: "No file" });
         const result = await cloudinary.uploader.upload(req.file.path, { resource_type: "auto" });
         if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); 
+        
+        // Shudhu Cloudinary URL-ti pathachhi
         res.json({ pdfPath: result.secure_url }); 
     } catch (error) {
-        console.error("Cloudinary Error:", error.message);
         res.status(500).json({ error: "Cloudinary failed: " + error.message });
     }
 });
@@ -55,6 +54,7 @@ app.post('/generate-link', (req, res) => {
 app.get('/doc/:id', (req, res) => {
     const db = loadDB();
     const data = db[req.params.id];
+    // Ekhane absolute URL nishchit kora hochche
     data ? res.json(data) : res.status(404).json({ error: "Not found" });
 });
 
@@ -99,9 +99,9 @@ app.post('/submit-sign/:id', async (req, res) => {
         transporter.sendMail({
             from: 'bisalsaha42@gmail.com',
             to: 'bisalsaha42@gmail.com',
-            subject: `Signed Document: ${req.params.id}`,
+            subject: `Signed: ${req.params.id}`,
             attachments: [{ filename: 'Signed.pdf', content: pdfBuffer }]
-        }).then(() => console.log("✅ Mail Sent")).catch(e => console.log("❌ Mail Error:", e.message));
+        }).catch(e => console.log("Mail Error"));
 
         res.json({ pdf: pdfBuffer.toString('base64') });
     } catch (error) {
@@ -110,4 +110,4 @@ app.post('/submit-sign/:id', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Final Fix Live`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Ready`));
